@@ -99,9 +99,18 @@ const upstreamFiles = walk(SRC, SRC);
 
 for (const rel of upstreamFiles) {
   const top = rel.split('/')[0];
-  if (!INCLUDE_TOP.has(top) && !INCLUDE_TOP.has(rel)) {
-    if (EXCLUDE_TOP.has(top) || EXCLUDE_TOP.has(rel)) { report.desktopSkipped++; }
-    continue; // 白名单外的非桌面文件也跳过（未归类）
+  let include = INCLUDE_TOP.has(top) || INCLUDE_TOP.has(rel);
+  if (!include) {
+    // 根目录顶层 .py 模块自动收录：上游会把旧模块拆分出新的顶层文件
+    // （0.21.1 把 hermes_state.py 拆出 hermes_state_errors/repair/dbfile... 等 18 个，
+    //  硬编码白名单不认识 → 载荷缺文件 → 网关启动即 ModuleNotFoundError）。
+    const isRootPy = !rel.includes('/') && rel.endsWith('.py');
+    if (isRootPy) {
+      include = true;
+    } else {
+      if (EXCLUDE_TOP.has(top) || EXCLUDE_TOP.has(rel)) { report.desktopSkipped++; }
+      continue; // 白名单外的非桌面文件也跳过（未归类）
+    }
   }
   const src = path.join(SRC, rel);
   const dst = path.join(TARGET, rel);
