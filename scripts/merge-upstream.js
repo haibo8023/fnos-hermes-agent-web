@@ -58,10 +58,13 @@ const EXCLUDE_TOP = new Set([
 ]);
 
 // ── 我们移植层改过的文件（官方更新绝不覆盖，冲突时保留我们的）─────
+// 注意：hermes_cli/web_server.py 自 0.21.1 起不再覆盖——上游把 dashboard 拆分为
+// web_routers/* 多模块，旧 fork 版（0.20.6 单文件巨石）与新 main.py 签名不兼容
+// （start_server() 缺 start_mcp_discovery_after_bind 直接 TypeError）；0.21.x 上游
+// 已内建 dashboard 认证/守卫（ticket 走 WS subprotocol），跟随上游即可。
 const PORT_OVERRIDES = new Set([
   'tui_gateway/server.py',        // runtime_check deadline/cache + WS 守卫
   'tui_gateway/methods_config.py', // runtime_check handler（状态在 server.py）
-  'hermes_cli/web_server.py',      // dashboard WS Host/Origin 守卫（网页端会话列表）
 ]);
 
 // ── 工具 ───────────────────────────────────────────────────────────
