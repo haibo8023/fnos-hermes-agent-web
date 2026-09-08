@@ -58,14 +58,12 @@ const EXCLUDE_TOP = new Set([
 ]);
 
 // ── 我们移植层改过的文件（官方更新绝不覆盖，冲突时保留我们的）─────
-// 注意：hermes_cli/web_server.py 自 0.21.1 起不再覆盖——上游把 dashboard 拆分为
-// web_routers/* 多模块，旧 fork 版（0.20.6 单文件巨石）与新 main.py 签名不兼容
-// （start_server() 缺 start_mcp_discovery_after_bind 直接 TypeError）；0.21.x 上游
-// 已内建 dashboard 认证/守卫（ticket 走 WS subprotocol），跟随上游即可。
-const PORT_OVERRIDES = new Set([
-  'tui_gateway/server.py',        // runtime_check deadline/cache + WS 守卫
-  'tui_gateway/methods_config.py', // runtime_check handler（状态在 server.py）
-]);
+// 2026-09-09 起 PORT_OVERRIDES 清空：0.20.6 时代的三件手工补丁
+// （tui_gateway runtime_check/WS 守卫、web_server dashboard 守卫）在 0.21.x
+// 官方已全部内建且更强（heartbeat refresher / event replay / keepalive /
+// ticket 走 WS subprotocol）；保留旧分叉反而让新 chat_ws 调不到
+// _start_backend_heartbeat_refresher → WS 握手即崩（网关永远"连接中"）。
+const PORT_OVERRIDES = new Set([]);
 
 // ── 工具 ───────────────────────────────────────────────────────────
 function walk(dir, base) {
