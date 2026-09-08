@@ -281,7 +281,12 @@
         .then(function (r) { return r.ok ? { reachable: true, authMode: "unknown", latency_ms: 0 } : { reachable: false, authMode: "unknown", error: "HTTP " + r.status }; })
         .catch(function (e) { return { ok: false, error: e.message }; });
     },
-    probeConnectionConfig: function () { return Promise.resolve({ reachable: false, authMode: "unknown" }); },
+    probeConnectionConfig: function () {
+      // 0.21.x 前端启动就绪检查依赖本探测；真实探测 dashboard 健康端点（经 monitor 同源代理）
+      return fetch(base + "/api/health", { cache: "no-store" })
+        .then(function (r) { return { reachable: r.ok, authMode: "token" }; })
+        .catch(function () { return { reachable: false, authMode: "unknown" }; });
+    },
     applyConnectionConfig: function () { return Promise.resolve(mkConnection()); },
     oauthLoginConnectionConfig: function () { return Promise.resolve({ ok: false, error: "web: OAuth login unavailable" }); },
     oauthLogoutConnectionConfig: function () { return Promise.resolve({ ok: true }); },

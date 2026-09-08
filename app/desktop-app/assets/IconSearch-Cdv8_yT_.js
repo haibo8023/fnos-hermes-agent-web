@@ -1,0 +1,1 @@
+import{U as e}from"./i18n-B2prx-sb.js";var t=e(`outline`,`loader-2`,`Loader2`,[[`path`,{d:`M12 3a9 9 0 1 0 9 9`,key:`svg-0`}]]),n=e(`outline`,`search`,`Search`,[[`path`,{d:`M3 10a7 7 0 1 0 14 0a7 7 0 1 0 -14 0`,key:`svg-0`}],[`path`,{d:`M21 21l-6 -6`,key:`svg-1`}]]);export{t as n,n as t};
