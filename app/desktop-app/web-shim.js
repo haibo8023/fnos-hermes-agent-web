@@ -112,7 +112,21 @@
 
   var _pickedFiles = [];
   var _pickSeq = 0;
-  function _pickInput(opts) {
+  var _usedFakePaths = {};
+    function _fakeWinPath(name) {
+          // Windows 盘符样式假绝对路径：SPA 见 win 路径 + 网关 POSIX cwd 判为远程，
+          // 才会附带 data_url 上传（网关落盘 attachments/）；POSIX 样式路径会被当
+          // 网关本地文件直传路径 → "file not found on gateway and no data_url provided"。
+          var raw = String(name || 'attachment').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').trim() || 'attachment';
+          var dir = 'C:\\Users\\Hermes\\Attachments\\';
+          var p = dir + raw;
+          if (!_usedFakePaths[p]) { _usedFakePaths[p] = 1; return p; }
+          var stem = raw.replace(/\.[^.]*$/, ''), ext = raw.slice(stem.length), k = 2;
+          while (_usedFakePaths[(p = dir + stem + ' (' + (k++) + ')' + ext)]) {}
+          _usedFakePaths[p] = 1;
+          return p;
+        }
+        function _pickInput(opts) {
     return new Promise(function (resolve) {
       try {
         var input = document.createElement('input');
@@ -130,8 +144,8 @@
         input.addEventListener('change', function () {
           var paths = [];
           Array.prototype.forEach.call(input.files || [], function (file) {
-            var id = 'webpick_' + (++_pickSeq);
-            _pickedFiles.push({ id: id, file: file });
+            var id = _fakeWinPath(file.webkitRelativePath || file.name);
+            _pickedFiles.push({ id: id, path: id, file: file });
             paths.push(id);
           });
           cleanup();
@@ -174,8 +188,8 @@
     selectSavePath: function (opts) { return Promise.resolve((opts && opts.defaultPath) || 'download'); },
     getPathForFile: function (file) {
       if (file && (file.name || file instanceof Blob)) {
-        var pid = 'webpick_' + (++_pickSeq);
-        _pickedFiles.push({ id: pid, file: file });
+        var pid = _fakeWinPath(file.name);
+        _pickedFiles.push({ id: pid, path: pid, file: file });
         return pid;
       }
       return '';
