@@ -24,7 +24,7 @@ const HERMES_CONFIG  = `${DATA_DIR}/config.yaml`;
 const HERMES_ENV     = `${DATA_DIR}/.env`;
 const CONFIG_VERSION = "1.0";
 
-const GITHUB_REPO     = process.env.GITHUB_REPO  || "veenyi/fnos-hermes-agent-web";
+const GITHUB_REPO     = (process.env.GITHUB_REPO  || "").trim();
 const GITHUB_PAT_FILE = `${VAR_DIR}/github_pat`;
 
 const TELEGRAM_ONBOARDING_URL = (process.env.TELEGRAM_ONBOARDING_URL || "https://setup.hermes-agent.nousresearch.com").replace(/\/+$/, "");
@@ -1661,6 +1661,7 @@ export async function handleCustomRoute(req) {
   // ── 应用更新（GitHub Releases / Actions） ──
   if (path === "/api/app/update/check") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       const headers = { "Accept": "application/vnd.github+json", "User-Agent": "fnos-hermes-agent" };
       if (pat) headers["Authorization"] = `Bearer ${pat}`;
@@ -1734,6 +1735,7 @@ export async function handleCustomRoute(req) {
   }
   if (path === "/api/app/update/dispatch" && method === "POST") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       if (!pat) {
         return new Response(JSON.stringify({ ok: false, error: "未配置 GitHub PAT，请先在应用更新卡片中设置" }), { status: 401, headers: jsonHeaders() });
@@ -1762,6 +1764,7 @@ export async function handleCustomRoute(req) {
   }
   if (path === "/api/app/update/run") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       const headers = { "Accept": "application/vnd.github+json", "User-Agent": "fnos-hermes-agent" };
       if (pat) headers["Authorization"] = `Bearer ${pat}`;

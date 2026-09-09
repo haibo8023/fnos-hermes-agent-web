@@ -4949,7 +4949,7 @@ async function handleFetch(req) {
   }
 
   // ── 应用包更新（GitHub Releases / Actions）────────────────────────────────
-  const GITHUB_REPO = process.env.GITHUB_REPO || "veenyi/fnos-hermes-agent-web";
+  const GITHUB_REPO = (process.env.GITHUB_REPO || "").trim();
   const GITHUB_PAT_FILE = `${VAR_DIR}/github_pat`;
 
   function getGitHubPAT() {
@@ -4964,6 +4964,7 @@ async function handleFetch(req) {
   // 获取「最新发布」的 release：按 published_at 排序而非 created_at。
   // （releases?per_page=1 按 created_at 倒序，重建过的旧 release 会排在前面，导致热更拉到旧版本）
   async function fetchLatestPublishedRelease(headers) {
+    if (!GITHUB_REPO) return { data: null, status: 409, notConfigured: true };
     const r = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`, {
       signal: AbortSignal.timeout(15000), headers,
     });
@@ -5199,6 +5200,7 @@ async function handleFetch(req) {
 
   if (path === "/api/app/update/check") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       const headers = { "Accept": "application/vnd.github+json", "User-Agent": "fnos-hermes-agent" };
       if (pat) headers["Authorization"] = `Bearer ${pat}`;
@@ -5479,6 +5481,7 @@ async function handleFetch(req) {
 
   if (path === "/api/app/update/dispatch" && req.method === "POST") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       if (!pat) {
         return new Response(JSON.stringify({ ok: false, error: "未配置 GitHub PAT，请先在应用更新卡片中设置" }), {
@@ -5512,6 +5515,7 @@ async function handleFetch(req) {
 
   if (path === "/api/app/update/run") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       const headers = { "Accept": "application/vnd.github+json", "User-Agent": "fnos-hermes-agent" };
       if (pat) headers["Authorization"] = `Bearer ${pat}`;
@@ -5594,6 +5598,7 @@ async function handleFetch(req) {
   // 注意：完整安装不再在服务端自动替换文件（旧 /api/app/update/full 已移除），文件级替换请走「热更新」按钮。
   if (path === "/api/app/update/fpk") {
     try {
+      if (!GITHUB_REPO) return new Response(JSON.stringify({ ok: false, notConfigured: true, error: "GitHub 更新通道未配置（需要 GITHUB_REPO 环境变量，owner/repo 形式）" }), { status: 409, headers: jsonHeaders() });
       const pat = getGitHubPAT();
       const ghHeaders = { "Accept": "application/vnd.github+json", "User-Agent": "fnos-hermes-agent" };
       if (pat) ghHeaders["Authorization"] = `Bearer ${pat}`;
