@@ -16,6 +16,40 @@
     // 未注入配置时仍安装桥,但 api/连接抛错,避免白屏
     CONFIG = { base: "/proxy/dashboard", token: "", profile: null };
   }
+  // [DIAG] boot 流量记录仪（临时）
+  window.__clog = [];
+  try {
+    var ow = console.warn, oe = console.error;
+    console.warn = function () { window.__clog.push('W:' + Array.prototype.map.call(arguments, String).join(' ').slice(0, 240)); return ow.apply(console, arguments); };
+    console.error = function () { window.__clog.push('E:' + Array.prototype.map.call(arguments, String).join(' ').slice(0, 240)); return oe.apply(console, arguments); };
+    window.addEventListener('hashchange', function () { window.__clog.push('HASH:' + location.hash.slice(0, 80)); });
+  } catch (e) {}
+  window.__wslog = [];
+  try {
+    var OW = window.WebSocket;
+    var WSlog = window.__wslog;
+    window.WebSocket = function (url, protocols) {
+      var ws = protocols !== undefined ? new OW(url, protocols) : new OW(url);
+      var rec = { k: 'ws-open', url: String(url).replace(/token=[^&]+/, 'token=***').slice(0, 140), t: Math.round(performance.now()), sent: [], got: [] };
+      WSlog.push(rec);
+      try {
+        var os = ws.send.bind(ws);
+        ws.send = function (d) { if (rec.sent.length < 40) rec.sent.push(String(d).slice(0, 160)); return os(d); };
+        ws.addEventListener('message', function (ev) { if (rec.got.length < 40) rec.got.push(String(ev.data).slice(0, 160)); });
+        ws.addEventListener('close', function (ev) { rec.close = ev.code + ' ' + (ev.reason || '').slice(0, 40); });
+        ws.addEventListener('error', function () { rec.err = 1; });
+      } catch (e) {}
+      return ws;
+    };
+    window.WebSocket.prototype = OW.prototype;
+    ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'].forEach(function (k, i) { window.WebSocket[k] = i; });
+    var OF = window.fetch;
+    window.fetch = function (u, o) {
+      var url = String(typeof u === 'string' ? u : (u && u.url) || '');
+      var rec = { k: 'fetch', url: url.replace(window.location.origin, '').slice(0, 130), m: (o && o.method) || 'GET', t: Math.round(performance.now()) };
+      return OF.apply(this, arguments).then(function (r) { rec.st = r.status; window.__wslog.push(rec); return r; }, function (e) { rec.st = 'ERR ' + String(e).slice(0, 60); window.__wslog.push(rec); throw e; });
+    };
+  } catch (e) {}
   var base = CONFIG.base.replace(/\/+$/, "");
   var token = CONFIG.token;
 
