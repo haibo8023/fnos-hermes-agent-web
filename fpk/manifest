@@ -1,5 +1,5 @@
 appname               = hermes-agent
-version               = 0.21.1.02
+version               = 0.21.1.03
 install_dep_apps      = nodejs_v24
 display_name          = Hermes Agent
 icon                  = ICON.PNG
