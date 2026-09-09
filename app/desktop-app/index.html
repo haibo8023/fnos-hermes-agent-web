@@ -1,6 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
+  <style id="hermes-webline-overrides">
+    /* web 线补丁：searchable-select 触发钮 min-w-0 无最小宽度，<2xl 布局下列表框宽度
+       坍缩到内容宽（时区下拉成竖排单字条）。Radix popover 跟随触发钮宽度 → 给触发钮
+       设最小宽度，下拉面板随之 >= 240px。 */
+    button[data-slot="searchable-select-trigger"] { min-width: 240px; }
+  </style>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
@@ -142,7 +148,7 @@
     <link rel="stylesheet" crossorigin href="./assets/glyph-spinner-DL5QKO4M.css">
     <link rel="stylesheet" crossorigin href="./assets/index-Be0ULiNl.css">
       <script>window.__HERMES_WEB_CONFIG__ = window.__HERMES_WEB_CONFIG__ || { base: "/proxy/dashboard", token: "", profile: null };</script>
-    <script src="./web-shim.js?v=45"></script>
+    <script src="./web-shim.js?v=46"></script>
   </head>
   <body>
     <div id="root" class="scrollbar-dt"></div>

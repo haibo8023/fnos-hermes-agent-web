@@ -230,6 +230,73 @@
     },
     readFileDataUrl: function (id) { return _readFile(_findPicked(id), true); },
     readFileDataUrlForAttach: function (id) { return _readFile(_findPicked(id), true); },
+    // ── 图片保存（web 版：内存暂存 Blob + 假 Windows 路径；返回的假路径驱动 SPA
+    //    按「远程文件」处理，发送时走 readFileDataUrlForAttach 取 data_url，网关落盘
+    //    会话附件目录——与文件上传同一链路）────────────────────────────────
+    saveImageBuffer: function (dir, buffer, name) {
+      return Promise.resolve().then(function () {
+        var blob = null, mime = 'image/png'
+        try {
+          if (typeof buffer === 'string') {
+            var m2 = /^data:([a-z0-9.+-]+);base64,(.*)$/i.exec(buffer)
+            var b64 = m2 ? m2[2] : buffer
+            if (m2) mime = m2[1] || mime
+            var bin = atob(b64)
+            var arr = new Uint8Array(bin.length)
+            for (var k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k)
+            blob = new Blob([arr], { type: mime })
+          } else if (buffer) {
+            blob = new Blob([buffer], { type: mime })
+          }
+        } catch (e) { return '' }
+        if (!blob || !blob.size) return ''
+        var fname = String(name || ('image-' + (++_pickSeq) + '.png')).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+        var pid = _fakeWinPath(fname)
+        _pickedFiles.push({ id: pid, path: pid, file: blob })
+        return pid
+      })
+    },
+    // 从系统剪贴板取图片：仅 secure context（https/localhost）可用；
+    // 非安全上下文（LAN http）下诚实返回 null → UI 提示「剪贴板中没有图片」，
+    // 用户改走编辑器 Ctrl+V 粘贴（paste 事件自带图片项，同一条保存链）。
+    saveClipboardImage: function () {
+      var nav = navigator.clipboard
+      if (!nav || typeof nav.read !== 'function') return Promise.resolve(null)
+      return nav.read().then(function (items) {
+        for (var i = 0; i < items.length; i++) {
+          var types = items[i].types || []
+          for (var j = 0; j < types.length; j++) {
+            if (String(types[j]).indexOf('image') === 0) {
+              return items[i].getType(types[j]).then(function (blob) {
+                if (!blob || !blob.size) return null
+                var pid = _fakeWinPath('clipboard-' + Date.now() + '.png')
+                _pickedFiles.push({ id: pid, path: pid, file: blob })
+                return pid
+              })
+            }
+          }
+        }
+        return null
+      }).catch(function () { return null })
+    },
+    saveImageFromUrl: function (url) {
+      return Promise.resolve(fetch(url)).then(function (r) {
+        if (!r.ok) return ''
+        return r.blob()
+      }).then(function (blob) {
+        if (!blob || !blob.size) return ''
+        var fname = String((url.split('/').pop() || '').split('?')[0] || ('img-' + (++_pickSeq) + '.png')).slice(0, 120) || ('img-' + _pickSeq + '.png')
+        var pid = _fakeWinPath(fname)
+        _pickedFiles.push({ id: pid, path: pid, file: blob })
+        return pid
+      }).catch(function () { return '' })
+    },
+    readClipboard: function () {
+      var nav = navigator.clipboard
+      if (!nav || typeof nav.readText !== 'function') return Promise.resolve(null)
+      return nav.readText().catch(function () { return null })
+    },
+    requestMicrophoneAccess: function () { return Promise.resolve(false) },
     openSessionWindow: function (sessionId) {
       try {
         var base = window.location.href.split('#')[0];
