@@ -232,26 +232,36 @@
     readFileDataUrlForAttach: function (id) { return _readFile(_findPicked(id), true); },
     // ── 图片保存（web 版：内存暂存 Blob + 假 Windows 路径；返回的假路径驱动 SPA
     //    按「远程文件」处理，发送时走 readFileDataUrlForAttach 取 data_url，网关落盘
-    //    会话附件目录——与文件上传同一链路）────────────────────────────────
-    saveImageBuffer: function (dir, buffer, name) {
+    //    会话附件目录——与文件上传同一链路）
+    //    契约（对照 bundle 调用点）：saveImageBuffer(uint8Array, ext, name)
+    //    e.arrayBuffer() → new Uint8Array → saveImageBuffer(n, UVe(e)="​.png", e.name)
+    //    返回假路径字符串；falsy 时 SPA 弹「无法将图片写入磁盘」
+    saveImageBuffer: function (buffer, ext, name) {
       return Promise.resolve().then(function () {
-        var blob = null, mime = 'image/png'
+        var blob = null
+        var b = buffer
         try {
-          if (typeof buffer === 'string') {
-            var m2 = /^data:([a-z0-9.+-]+);base64,(.*)$/i.exec(buffer)
-            var b64 = m2 ? m2[2] : buffer
-            if (m2) mime = m2[1] || mime
+          if (b && b.byteLength !== undefined) {
+            var u8 = b instanceof ArrayBuffer ? new Uint8Array(b) : b
+            var kind = String(ext || 'png').replace(/^\./, '').toLowerCase()
+            var mime = /^image\//.test(kind) ? kind : 'image/' + (kind || 'png')
+            blob = new Blob([u8], { type: mime })
+          } else if (typeof b === 'string') {
+            var m2 = /^data:([a-z0-9.+-]+);base64,(.*)$/.exec(b)
+            var b64 = m2 ? m2[2] : b
             var bin = atob(b64)
-            var arr = new Uint8Array(bin.length)
-            for (var k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k)
-            blob = new Blob([arr], { type: mime })
-          } else if (buffer) {
-            blob = new Blob([buffer], { type: mime })
+            var arr2 = new Uint8Array(bin.length)
+            for (var k2 = 0; k2 < bin.length; k2++) arr2[k2] = bin.charCodeAt(k2)
+            blob = new Blob([arr2], { type: (m2 && m2[1]) || 'image/png' })
+          } else if (b instanceof Blob) {
+            blob = b
           }
-        } catch (e) { return '' }
+        } catch (e3) { return '' }
         if (!blob || !blob.size) return ''
-        var fname = String(name || ('image-' + (++_pickSeq) + '.png')).replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
-        var pid = _fakeWinPath(fname)
+        var rawName = String(name || ('image-' + (++_pickSeq) + (ext || '.png')))
+          .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 120)
+        if (!rawName) rawName = 'image-' + _pickSeq + '.png'
+        var pid = _fakeWinPath(rawName)
         _pickedFiles.push({ id: pid, path: pid, file: blob })
         return pid
       })
@@ -426,9 +436,6 @@
       } catch (e) {}
       return Promise.resolve(true);
     },
-    openSessionWindow: function () { return Promise.resolve(); },
-    openSessionInTerminal: function () { return Promise.resolve(); },
-    openWindow: function () { return Promise.resolve(); },
     log: function (level, msg) { try { console[level] ? console[level]("[hermes-web]", msg) : console.log("[hermes-web]", msg); } catch (e) {} return Promise.resolve(); },
     writeClipboard: function (text) {
       try { if (navigator.clipboard) navigator.clipboard.writeText(String(text)); } catch (e) {}
@@ -482,7 +489,6 @@
 
     // ── 降级:文件/终端/桌面特有(嵌套对象统一走 nested 定义,带嵌套 Proxy) ──
     workspace: function () { return Promise.resolve({ path: "", exists: false }); },
-    readFileDataUrl: function () { return Promise.resolve(null); },
     writeTextFile: function () { return Promise.resolve(); },
     trashPath: function () { return Promise.resolve(); },
     watchDirectory: function () { return Promise.resolve(function () {}); },
@@ -720,7 +726,7 @@
     }
   });
 
-  window.hermesDesktop = proxied;
+  window.hermesDesktop = proxied;;
   window.__HERMES_WEB_SHIM_LOADED__ = true;
 })();
 
@@ -920,4 +926,19 @@
     obsP.observe(document.documentElement, { childList: true, subtree: true });
   } catch (e) {}
   setInterval(fixPets, 1500);
-})();
+})();  // [randomUUID-polyfill] 非安全上下文（LAN http）缺 crypto.randomUUID，
+  // SPA 附件身份（createComposerAttachmentOccurrenceId）会抛 TypeError 被吞 →
+  // 图片附件静默丢失。用 getRandomValues（非安全上下文可用）补 v4 UUID。
+  try {
+    if (window.crypto && typeof window.crypto.randomUUID !== 'function' &&
+        typeof window.crypto.getRandomValues === 'function') {
+      window.crypto.randomUUID = function () {
+        var b = window.crypto.getRandomValues(new Uint8Array(16))
+        b[6] = (b[6] & 0x0f) | 0x40
+        b[8] = (b[8] & 0x3f) | 0x80
+        var h = Array.prototype.map.call(b, function (x) { return x.toString(16).padStart(2, '0') }).join('')
+        return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20)
+      }
+    }
+  } catch (e) {}
+
