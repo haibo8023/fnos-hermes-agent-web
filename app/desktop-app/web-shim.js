@@ -132,7 +132,9 @@
           Array.prototype.forEach.call(input.files || [], function (file) {
             var id = 'webpick_' + (++_pickSeq);
             _pickedFiles.push({ id: id, file: file });
-            paths.push(id);
+            // 假绝对路径（Windows 盘符样式）：桌面 SPA 据此判定文件不在
+            // gateway 本机，从而附带 data_url 走 file.attach/image.attach 上传
+            paths.push('C:/' + id + '/' + (file.name || id));
           });
           cleanup();
           resolve(paths.length ? paths : null);
@@ -151,6 +153,11 @@
   }
   function _findPicked(id) {
     for (var i = 0; i < _pickedFiles.length; i++) if (_pickedFiles[i].id === id) return _pickedFiles[i].file;
+    // selectPaths/getPathForFile 现返回 "C:/webpick_N/原名" 假路径：提取 webpick_N 精确找回
+    var m = /(webpick_\d+)/.exec(String(id == null ? '' : id));
+    if (m) {
+      for (var k = 0; k < _pickedFiles.length; k++) if (_pickedFiles[k].id === m[1]) return _pickedFiles[k].file;
+    }
     // 兼容按文件名/路径匹配（拖放文件可能直接传 file.name 或本地路径）
     for (var j = 0; j < _pickedFiles.length; j++) {
       var n = _pickedFiles[j].file && _pickedFiles[j].file.name;
@@ -176,7 +183,8 @@
       if (file && (file.name || file instanceof Blob)) {
         var pid = 'webpick_' + (++_pickSeq);
         _pickedFiles.push({ id: pid, file: file });
-        return pid;
+        // 同 selectPaths：返回假绝对路径触发 data_url 上传
+        return 'C:/' + pid + '/' + (file.name || pid);
       }
       return '';
     },
