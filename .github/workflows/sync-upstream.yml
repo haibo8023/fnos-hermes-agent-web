@@ -92,7 +92,12 @@ jobs:
             fi
             echo "下载上一完整包: $PREV_RELEASE_URL"
             curl -sSL -o /tmp/prev.fpk "$PREV_RELEASE_URL"
-            (cd /tmp && tar xzf prev.fpk app.tgz && tar xzf app.tgz ./venv-bundle.tar.gz && mv ./venv-bundle.tar.gz "$GITHUB_WORKSPACE/fpk/venv-bundle.tar.gz")
+            (cd /tmp && rm -rf prevpkg && mkdir -p prevpkg \
+            && tar xzf prev.fpk -C prevpkg app.tgz \
+            && VENV_MEMBER="$(tar tzf prevpkg/app.tgz | grep -E 'venv-bundle\.tar\.gz$' | head -1)" \
+            && [ -n "$VENV_MEMBER" ] && echo "venv-bundle 成员: $VENV_MEMBER" \
+            && tar xzf prevpkg/app.tgz -C prevpkg "$VENV_MEMBER" \
+            && mv "prevpkg/$VENV_MEMBER" "$GITHUB_WORKSPACE/fpk/venv-bundle.tar.gz")
             [ -f fpk/venv-bundle.tar.gz ] || { echo "✗ venv-bundle 提取失败" >&2; exit 1; }
           fi
           ls -la fpk/venv-bundle.tar.gz 2>/dev/null && echo "✓ venv-bundle 就绪" || { echo "✗ 无 venv-bundle" >&2; exit 1; }
