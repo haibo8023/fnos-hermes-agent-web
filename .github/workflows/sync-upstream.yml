@@ -131,8 +131,11 @@ jobs:
           WANT="$(cut -d. -f1-3 "$GITHUB_WORKSPACE/VERSION")"
           grep -qx "HERMES_VERSION=$WANT" ./config/bootstrap/hermes-version.env \
             || { echo "✗ hermes-version.env 版本不符（期望 $WANT）:" >&2; cat ./config/bootstrap/hermes-version.env >&2; exit 1; }
-          tar tzf app.tgz | grep -qE '(^|/)venv-bundle.*\.tar\.gz$' \
+          tar tzf app.tgz > /tmp/pkg-list.txt
+          grep -qE '(^|/)venv-bundle.*\.tar\.gz$' /tmp/pkg-list.txt \
             || { echo "✗ 包内缺 venv-bundle.tar.gz" >&2; exit 1; }
+          grep -qE '(^|/)hermes-src/hermes_platform/__init__\.py$' /tmp/pkg-list.txt \
+            || { echo "✗ 包内缺 hermes-src/hermes_platform" >&2; exit 1; }
           echo "✓ 包内校验通过：hermes_platform + venv-bundle 均在包内，目标版本 = $WANT"
 
       - name: Publish

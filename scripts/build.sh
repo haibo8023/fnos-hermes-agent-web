@@ -22,11 +22,9 @@ OFFICIAL_VER="$(echo "$CUR_VERSION" | cut -d. -f1-3)"
 BUILD_NUM="$(echo "$CUR_VERSION" | awk -F. '{print $NF}')"
 
 # 上一版本（从 git tag 取最近的非当前 tag）
-PREV_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
-if [ "$PREV_TAG" = "v$CUR_VERSION" ]; then
-  # 当前版本已是 tag（可能是手动构建），用 git log 找上一个 tag
-  PREV_TAG="$(git tag --sort=-creatordate | grep -v "^v$CUR_VERSION$" | head -1 || echo "")"
-fi
+# 只认「版本 tag」（v<数字>…），排除 venv-bundle-* 之类的载体/工具 tag，
+# 否则增量包会以错误的 base 生成（2026-09-23 实测：载体 tag 让上一版变成 env-bundle-0.21.4.1）
+PREV_TAG="$(git tag --sort=-creatordate | grep -E '^v[0-9]' | grep -v "^v$CUR_VERSION$" | head -1 || echo "")"
 PREV_VERSION="${PREV_TAG#v}"
 PREV_VERSION="${PREV_VERSION:-}"
 
