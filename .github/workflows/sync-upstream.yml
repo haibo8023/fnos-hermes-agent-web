@@ -1,11 +1,14 @@
 name: Sync Upstream & Build & Release
 
 on:
-  # 仅手动触发（workflow_dispatch / 或由同步脚本 --push 触发）。
-  # 已取消定时自动同步上游：自动构建发布未经真机核验会带病上线
-  # （0.20.5.02 缺 web_dist 全量用户网关失败、官方 _cancel_ws_orphan_reap 未定义等），
-  # 上游更新改为人工确认后手动触发。
+  # 手动触发（随时可点）
   workflow_dispatch:
+  # 定时自动同步官方上游：有新版本/新提交就自动 构建 → 包内校验 → 收敛仓库 → 发布 Release；
+  # 上游无变化时 sync-upstream.js 直接退出、后续步骤全部跳过（安静、无任何副作用）。
+  # UTC 02:10 / 14:10 = 北京时间 10:10 / 22:10。
+  # 注：仓库连续 60 天无活动时 GitHub 会自动停用 schedule（会邮件提醒，重新启用即可）。
+  schedule:
+    - cron: '10 2,14 * * *'
 
 permissions:
   contents: write
@@ -75,7 +78,7 @@ jobs:
 
       # venv-bundle（约 70MB，不提交仓库）
       #   1) 首选本仓库 Release 载体资产 venv-bundle.tar.gz（tag=venv-bundle-0.21.4.1）
-      #   2) 兜底：从本仓库/veenyi 的 .fpk 里解包提取 venv-bundle.tar.gz
+      #   2) 兜底：从本仓库最近一个 .fpk Release 里解包提取（不再依赖任何外部仓库）
       - name: Fetch venv-bundle
         if: steps.check.outputs.changed == 'true'
         env:
@@ -94,13 +97,10 @@ jobs:
             else
               echo "⚠ 本仓库载体不可用，回退：从上一版 .fpk 解包提取"
               rm -f fpk/venv-bundle.tar.gz
-              FPK_URL=""
-              for R in "$GITHUB_REPOSITORY" veenyi/fnos-hermes-agent-web; do
-                FPK_URL="$(curl -sS -H "Authorization: token ${GITHUB_TOKEN}" -H 'Accept: application/vnd.github+json' \
-                  "https://api.github.com/repos/$R/releases?per_page=30" \
-                  | python3 -c "import json,sys;d=json.load(sys.stdin);print(next((a['browser_download_url'] for r in d for a in r.get('assets',[]) if a['name'].endswith('.fpk')),''))" 2>/dev/null || true)"
-                [ -n "$FPK_URL" ] && { echo "◈ 取包: $FPK_URL"; break; }
-              done
+              FPK_URL="$(curl -sS -H "Authorization: token ${GITHUB_TOKEN}" -H 'Accept: application/vnd.github+json' \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=30" \
+                | python3 -c "import json,sys;d=json.load(sys.stdin);print(next((a['browser_download_url'] for r in d for a in r.get('assets',[]) if a['name'].endswith('.fpk')),''))" 2>/dev/null || true)"
+              [ -n "$FPK_URL" ] && echo "◈ 兜底取本仓库 .fpk: $FPK_URL"
               [ -n "$FPK_URL" ] || { echo "✗ 找不到 venv-bundle 来源（载体不可用且无 .fpk）" >&2; exit 1; }
               curl -fsSL -o /tmp/prev.fpk "$FPK_URL"
               (cd /tmp && rm -rf prevpkg && mkdir -p prevpkg \
@@ -138,14 +138,19 @@ jobs:
             || { echo "✗ 包内缺 hermes-src/hermes_platform" >&2; exit 1; }
           echo "✓ 包内校验通过：hermes_platform + venv-bundle 均在包内，目标版本 = $WANT"
 
+      # 先收敛仓库（VERSION / .upstream-state / 受控合并结果），再发布 Release。
+      # 顺序很重要：若反过来（先 Publish 后 Push），一旦 Push 失败就会留下
+      # 「tag+Release 已建、main 的 VERSION 没前进」的僵局 —— 之后每轮都算出同一版本号、
+      # Check version changed 判定 changed=false，CI 会永久空转（2026-09-23 实际踩过）。
+      # 现在任一步失败，下一轮都能靠 tag 与 VERSION 的差异自愈。
+      - name: Push
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git push origin HEAD:main
+
       - name: Publish
         if: steps.check.outputs.changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash scripts/publish.sh
-
-      - name: Push
-        if: steps.check.outputs.changed == 'true'
-        run: |
-          git push origin HEAD:main
