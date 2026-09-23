@@ -1,0 +1,1 @@
+function e(e){let t=e.nativeEvent??e;return!!(t.isComposing||e.isComposing)||t.keyCode===229||e.keyCode===229}function t(t){return t.key===`Enter`&&!e(t)}export{t as n,e as t};

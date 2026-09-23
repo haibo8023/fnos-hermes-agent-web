@@ -1,0 +1,1 @@
+var e=`rounded-3xl bg-(--ui-widget-surface-background) px-3.5 py-3`;export{e as t};

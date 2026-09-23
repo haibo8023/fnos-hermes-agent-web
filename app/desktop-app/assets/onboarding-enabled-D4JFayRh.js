@@ -1,0 +1,1 @@
+function e(){return window.hermesDesktop?.guestOnboardingEnabled===!0}export{e as t};
