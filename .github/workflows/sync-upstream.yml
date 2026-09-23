@@ -73,8 +73,9 @@ jobs:
           git add VERSION .upstream-state app/hermes-src scripts/merge-upstream.js
           git commit -m "sync: 上游 ${{ steps.version.outputs.version }} 受控合并（保留移植修改）" --allow-empty || true
 
-      # venv-bundle（约 70MB，不提交仓库）：优先用本仓库 Release 的 venv-bundle 资产，
-      # 没有则从本仓库/veenyi 的 .fpk 里解包提取（跨仓库只读仅为兜底）。
+      # venv-bundle（约 70MB，不提交仓库）
+      #   1) 首选本仓库 Release 载体资产 venv-bundle.tar.gz（tag=venv-bundle-0.21.4.1）
+      #   2) 兜底：从本仓库/veenyi 的 .fpk 里解包提取 venv-bundle.tar.gz
       - name: Fetch venv-bundle
         if: steps.check.outputs.changed == 'true'
         env:
@@ -83,28 +84,25 @@ jobs:
           set -euo pipefail
           mkdir -p fpk
           if [ -f fpk/venv-bundle.tar.gz ]; then
-            echo "✓ venv-bundle 已存在于工作区，跳过获取"
+            echo "✓ venv-bundle 已存在于工作区"
           else
-            AUTH=(-H "Authorization: token ${GITHUB_TOKEN}" -H 'Accept: application/vnd.github+json')
-            list_assets() {  # $1=repo → 逐行打印资产下载地址
-              curl -sS "${AUTH[@]}" "https://api.github.com/repos/$1/releases?per_page=30" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{for(const r of JSON.parse(d)){for(const a of (r.assets||[])){console.log(a.browser_download_url)}}}catch(e){}})"
-            }
-            pick() {  # $1=repo $2=正则
-              list_assets "$1" | grep -E "$2" | head -1 || true
-            }
-            VENV_URL="$(pick "$GITHUB_REPOSITORY" 'venv-bundle[^/]*\.tar\.gz$')"
-            if [ -n "$VENV_URL" ]; then
-              echo "◈ 取本仓库 venv-bundle 资产: $VENV_URL"
-              curl -sSL -o fpk/venv-bundle.tar.gz "$VENV_URL"
+            VENV_TAG="venv-bundle-0.21.4.1"
+            VENV_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${VENV_TAG}/venv-bundle.tar.gz"
+            echo "◈ 尝试本仓库载体: $VENV_URL"
+            if curl -fsSL -o fpk/venv-bundle.tar.gz "$VENV_URL"; then
+              echo "✓ 已获取本仓库 venv-bundle（tag=${VENV_TAG}，$(du -h fpk/venv-bundle.tar.gz | cut -f1)）"
             else
-              FPK_URL="$(pick "$GITHUB_REPOSITORY" '\.fpk$')"
-              if [ -z "$FPK_URL" ]; then
-                echo "⚠ 本仓库无可用 Release，回退取 veenyi/fnos-hermes-agent-web 的 .fpk"
-                FPK_URL="$(pick veenyi/fnos-hermes-agent-web '\.fpk$')"
-              fi
-              [ -n "$FPK_URL" ] || { echo "✗ 找不到 venv-bundle 来源（既无 venv-bundle 资产也无 .fpk）" >&2; exit 1; }
-              echo "下载完整包并提取: $FPK_URL"
-              curl -sSL -o /tmp/prev.fpk "$FPK_URL"
+              echo "⚠ 本仓库载体不可用，回退：从上一版 .fpk 解包提取"
+              rm -f fpk/venv-bundle.tar.gz
+              FPK_URL=""
+              for R in "$GITHUB_REPOSITORY" veenyi/fnos-hermes-agent-web; do
+                FPK_URL="$(curl -sS -H "Authorization: token ${GITHUB_TOKEN}" -H 'Accept: application/vnd.github+json' \
+                  "https://api.github.com/repos/$R/releases?per_page=30" \
+                  | python3 -c "import json,sys;d=json.load(sys.stdin);print(next((a['browser_download_url'] for r in d for a in r.get('assets',[]) if a['name'].endswith('.fpk')),''))" 2>/dev/null || true)"
+                [ -n "$FPK_URL" ] && { echo "◈ 取包: $FPK_URL"; break; }
+              done
+              [ -n "$FPK_URL" ] || { echo "✗ 找不到 venv-bundle 来源（载体不可用且无 .fpk）" >&2; exit 1; }
+              curl -fsSL -o /tmp/prev.fpk "$FPK_URL"
               (cd /tmp && rm -rf prevpkg && mkdir -p prevpkg \
                 && tar xzf prev.fpk -C prevpkg app.tgz \
                 && VENV_MEMBER="$(tar tzf prevpkg/app.tgz | grep -E '(^|/)venv-bundle[^/]*\.tar\.gz$' | head -1)" \
