@@ -25,7 +25,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config remote.origin.url "https://x-access-token:${GITHUB_TOKEN}@github.com/veenyi/fnos-hermes-agent-web.git"
+          git config remote.origin.url "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git tag --sort=-creatordate | head -3 || true
 
       # 检测上游版本 + 更新 VERSION（无新提交时脚本直接退出，后续步骤跳过）
