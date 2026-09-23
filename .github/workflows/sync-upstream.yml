@@ -69,6 +69,25 @@ jobs:
         run: |
           node scripts/merge-upstream.js --upstream upstream --write
 
+      # 受控合并后判断是否真的产生了运行时变化：上游只改 docs/website/CI 这类
+      # 非运行时文件时，app/hermes-src 不会有变化 —— 此时回滚版本号、跳过构建与发布，
+      # 只把 .upstream-state 前移（由下一个 Commit/Push 步骤落库），避免发布"空版本"
+      # 把版本号推高（2026-09-23 实测：docs 提交让 VERSION 从 .02 一路涨到 .04）。
+      - name: Detect runtime changes
+        id: rt
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain app/hermes-src)" ]; then
+            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+            echo "◈ app/hermes-src 有运行时变化："
+            git status --porcelain app/hermes-src | head -20
+          else
+            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+            echo "◈ 上游提交未影响运行时（app/hermes-src 无变化）→ 本轮只记录上游状态，不构建不发布"
+            git checkout -- VERSION
+          fi
+
       # 先提交合并结果（build.sh 增量包 diff 需要 HEAD 包含合并）
       - name: Commit sync & merge
         if: steps.check.outputs.changed == 'true'
@@ -80,7 +99,7 @@ jobs:
       #   1) 首选本仓库 Release 载体资产 venv-bundle.tar.gz（tag=venv-bundle-0.21.4.1）
       #   2) 兜底：从本仓库最近一个 .fpk Release 里解包提取（不再依赖任何外部仓库）
       - name: Fetch venv-bundle
-        if: steps.check.outputs.changed == 'true'
+        if: steps.check.outputs.changed == 'true' && steps.rt.outputs.runtime_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -114,13 +133,13 @@ jobs:
           ls -la fpk/venv-bundle.tar.gz && echo "✓ venv-bundle 就绪"
 
       - name: Build
-        if: steps.check.outputs.changed == 'true'
+        if: steps.check.outputs.changed == 'true' && steps.rt.outputs.runtime_changed == 'true'
         run: |
           bash scripts/build.sh
 
       # 包内校验：拦住「载荷缺包 / 版本号文件没更新」类事故（只有真机才暴露）
       - name: Verify package contents
-        if: steps.check.outputs.changed == 'true'
+        if: steps.check.outputs.changed == 'true' && steps.rt.outputs.runtime_changed == 'true'
         run: |
           set -euo pipefail
           FPK="$GITHUB_WORKSPACE/dist/fnos-hermes-agent_v$(cat "$GITHUB_WORKSPACE/VERSION").fpk"
@@ -149,7 +168,7 @@ jobs:
           git push origin HEAD:main
 
       - name: Publish
-        if: steps.check.outputs.changed == 'true'
+        if: steps.check.outputs.changed == 'true' && steps.rt.outputs.runtime_changed == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
