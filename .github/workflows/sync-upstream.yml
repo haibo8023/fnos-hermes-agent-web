@@ -97,6 +97,21 @@ jobs:
         run: |
           bash scripts/build.sh
 
+      # 包内校验：拦住「载荷缺包 / 版本号文件没更新」类事故（只有真机才暴露）
+      - name: Verify package contents
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          FPK="$GITHUB_WORKSPACE/dist/fnos-hermes-agent_v$(cat "$GITHUB_WORKSPACE/VERSION").fpk"
+          [ -f "$FPK" ] || { echo "✗ 未找到 $FPK" >&2; exit 1; }
+          rm -rf /tmp/verify-pkg && mkdir -p /tmp/verify-pkg && cd /tmp/verify-pkg
+          tar xzf "$FPK" app.tgz
+          tar xzf app.tgz ./config/bootstrap/hermes-version.env ./hermes-src/hermes_platform/__init__.py
+          WANT="$(cut -d. -f1-3 "$GITHUB_WORKSPACE/VERSION")"
+          grep -qx "HERMES_VERSION=$WANT" ./config/bootstrap/hermes-version.env \
+            || { echo "✗ hermes-version.env 版本不符（期望 $WANT）:" >&2; cat ./config/bootstrap/hermes-version.env >&2; exit 1; }
+          echo "✓ 包内校验通过：hermes_platform 在包内，目标版本 = $WANT"
+
       - name: Publish
         if: steps.check.outputs.changed == 'true'
         env:

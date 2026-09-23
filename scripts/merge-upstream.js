@@ -32,6 +32,9 @@ for (let i = 0; i < argv.length; i++) {
 
 // ── 同步范围：官方顶层白名单（运行时核心）─────────────────────────
 const INCLUDE_TOP = new Set([
+  // 已知上游顶层运行时包；白名单外的顶层包会被静默跳过（漏包=载荷缺文件），
+  // 因此下方 pyprojectTopPackages() 还会依官方 pyproject 动态补齐，此处仅作审阅基准。
+  'hermes_platform',
   'hermes_cli', 'tui_gateway', 'agent', 'gateway', 'providers', 'skills', 'tools',
   'plugins', 'cron', 'acp_adapter', 'locales', 'optional-mcps', 'optional-skills',
   'datagen-config-examples', 'docker', 'nix', 'scripts',
@@ -94,6 +97,29 @@ if (!fs.existsSync(path.join(SRC, 'hermes_cli')) || !fs.existsSync(path.join(SRC
 }
 if (!fs.existsSync(TARGET)) { console.error('✗ 未找到 app/hermes-src'); process.exit(1); }
 
+// ── 动态补充白名单：以官方 pyproject 的 packages.find include 为准 ──────
+// 硬编码白名单必然滞后于上游：0.21.1 把 hermes_state.py 拆成 hermes_state_* 一组、
+// 0.21.4 新增顶层包 hermes_platform，两次都因「白名单外的顶层目录被静默跳过」导致
+// app/hermes-src 缺包 → 设备上网关启动即 ModuleNotFoundError（2026-09-23 事故）。
+// 这里把官方声明、白名单里没有的顶层包自动纳入（EXCLUDE_TOP 仍优先排除）。
+function pyprojectTopPackages(dir) {
+  try {
+    const txt = fs.readFileSync(path.join(dir, 'pyproject.toml'), 'utf8');
+    const m = txt.match(/\[tool\.setuptools\.packages\.find\][\s\S]*?include\s*=\s*\[([\s\S]*?)\]/);
+    if (!m) return [];
+    const tops = new Set();
+    for (const s of (m[1].match(/["']([^"']+)["']/g) || [])) {
+      const top = s.slice(1, -1).split('.')[0];
+      if (top && !top.includes('*') && !EXCLUDE_TOP.has(top)) tops.add(top);
+    }
+    return [...tops].sort();
+  } catch { return []; }
+}
+const OFFICIAL_TOP = pyprojectTopPackages(SRC);
+const DYN_TOP = OFFICIAL_TOP.filter((t) => !INCLUDE_TOP.has(t));
+for (const t of DYN_TOP) INCLUDE_TOP.add(t);
+if (DYN_TOP.length) console.log('◈ 依官方 pyproject 动态纳入顶层包: ' + DYN_TOP.join(', '));
+
 // ── 合并 ───────────────────────────────────────────────────────────
 const report = { updated: [], kept: [], added: [], same: 0, desktopSkipped: 0 };
 const upstreamFiles = walk(SRC, SRC);
@@ -132,6 +158,22 @@ for (const rel of upstreamFiles) {
   if (oursBuf.equals(upstreamBuf)) { report.same++; continue; }
   report.updated.push(rel);
   if (WRITE) fs.writeFileSync(dst, upstreamBuf);
+}
+
+// ── 完整性校验：官方 pyproject 声明的运行时包必须都落到 app/hermes-src ──
+// 拦住「载荷缺包」类发布事故：缺包只有真机才暴露（CI 没有能跑起来的 venv 冒烟）。
+const missingPkgs = OFFICIAL_TOP.filter((t) =>
+  !fs.existsSync(path.join(TARGET, t)) && !fs.existsSync(path.join(TARGET, t + '.py')));
+if (missingPkgs.length) {
+  const msg = '官方 pyproject 声明但 app/hermes-src 缺失的运行时包: ' + missingPkgs.join(', ');
+  if (WRITE) {
+    console.error('✗ ' + msg);
+    console.error('  发布出去会让设备网关启动即 ModuleNotFoundError（参见 2026-09-23 hermes_platform 事故）。');
+    process.exit(2);
+  }
+  console.warn('⚠ (dry-run) ' + msg);
+} else if (OFFICIAL_TOP.length) {
+  console.log('✓ 运行时包完整性校验通过（' + OFFICIAL_TOP.length + ' 个顶层包）');
 }
 
 // ── 官方 SHA/版本记录 ──────────────────────────────────────────────

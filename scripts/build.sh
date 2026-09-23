@@ -94,6 +94,28 @@ if [ -d "fpk/config/prompts" ]; then
   echo "✓ config/prompts 已带入 app.tgz"
 fi
 
+# 5.2 版本号文件（升级回调据此判断是否需要重装 venv，必须与 VERSION 官方段一致）
+#     fpk/cmd/{upgrade,install}_callback 读 ${APP_DIR}/config/bootstrap/hermes-version.env
+#     的 HERMES_VERSION；若该值与 venv 里已装版本相同，回调会打印
+#     "hermes OK: <ver> (matches target)" 并直接退出，跳过 uv pip install -e，
+#     于是 venv 的 editable 映射停留在旧版（2026-09-23 事故：目标版本被判成 0.21.1
+#     → 新源码 import hermes_platform 直接崩，门户/桌面版连不上网关）。
+#     这里以 VERSION 为准强制重写，避免 bump 改错文件（build.sh 取 app/config，
+#     而历次 bump 改的是 fpk/config/bootstrap/hermes-version.env）。
+mkdir -p "$APP_STAGE/config/bootstrap"
+if [ -f "fpk/config/bootstrap/hermes-version.env" ]; then
+  # shellcheck disable=SC1091
+  . "fpk/config/bootstrap/hermes-version.env" || true
+fi
+if [ "${HERMES_VERSION:-}" != "$OFFICIAL_VER" ]; then
+  echo "⚠ hermes-version.env 的 HERMES_VERSION=${HERMES_VERSION:-未设置} ≠ 官方版本 ${OFFICIAL_VER} → 以 VERSION 为准"
+fi
+{
+  echo "# 由 scripts/build.sh 于构建时生成（勿手改）：升级/安装回调据此决定是否重装 venv"
+  echo "HERMES_VERSION=${OFFICIAL_VER}"
+} > "$APP_STAGE/config/bootstrap/hermes-version.env"
+echo "✓ config/bootstrap/hermes-version.env → HERMES_VERSION=${OFFICIAL_VER}"
+
 # 6. 版本写入
 echo "$CUR_VERSION" > "$APP_STAGE/VERSION"
 if [ -f "fpk/manifest" ]; then
